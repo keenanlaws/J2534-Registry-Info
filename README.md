@@ -1,4 +1,4 @@
-# J2534-Tool-Info
+# J2534-Registry-Info
 This utility searches windows registry for installed j2534 library's , Tool info, and supported communication protocols. 
 
 EXAMPLE OUTPUT...

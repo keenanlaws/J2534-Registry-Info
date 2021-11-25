@@ -14,7 +14,7 @@ class ToolProtocolInfo:
         self.Protocols = ['CAN', 'ISO14230', 'ISO15765', 'ISO9141', 'J1850PWM', 'J1850VPW', 'SCI_A_ENGINE',
                           'SCI_A_TRANS', 'SCI_B_ENGINE', 'SCI_B_TRANS', 'MSCAN', 'MSISO15765', 'SW_CAN_PS']
 
-        self.toolINFO = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
+        self.toolINFO = []
 
         self.BaseKey = winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, self.REG_PATH)
         self.count = winreg.QueryInfoKey(self.BaseKey)[0]
@@ -25,13 +25,13 @@ class ToolProtocolInfo:
             Name = winreg.QueryValueEx(DeviceKey, "Name")[0]
             FunctionLibrary = winreg.QueryValueEx(DeviceKey, "FunctionLibrary")[0]
             Vendor = winreg.QueryValueEx(DeviceKey, "Vendor")[0]
-            self.toolINFO[i].append([i, Vendor, Name, FunctionLibrary])
+            self.toolINFO.append([i, Vendor, Name, FunctionLibrary])
 
             for item in self.Protocols:
                 if self.Search_Registry(item, DeviceKey):
-                    self.toolINFO[i].append(item)
+                    self.toolINFO.append(item)
 
-            self.J2534_Device_Reg_Info.append(self.toolINFO[i])
+            self.J2534_Device_Reg_Info.append(self.toolINFO)
 
     @staticmethod
     def Search_Registry(name, key):

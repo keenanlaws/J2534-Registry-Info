@@ -42,8 +42,7 @@ class ToolProtocolInfo:
             return None
 
     def Protocol_List(self):
-        for n in self.J2534_Device_Reg_Info:
-            print(n)
+        print(*self.J2534_Device_Reg_Info, sep='\n')
 
     def Dll_Path(self, index_of_tool):
         try:

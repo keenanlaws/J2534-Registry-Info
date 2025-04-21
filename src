@@ -1,79 +1,94 @@
 # coding:utf-8
 import platform
 import winreg
+from typing import List, Dict, Union
 
 
-class ToolProtocolInfo:
+class J2534DeviceList:
     def __init__(self):
-        if platform.architecture()[0] == '32bit':
-            self.REG_PATH = r"Software\\PassThruSupport.04.04\\"
-        else:
-            self.REG_PATH = r"Software\\Wow6432Node\\PassThruSupport.04.04\\"
+        self.REG_PATH = (
+            r"Software\PassThruSupport.04.04"
+            if platform.architecture()[0] == '32bit'
+            else r"Software\Wow6432Node\PassThruSupport.04.04"
+        )
 
-        # This protocol search list is only for j2534-1
-        self.Protocols = ['CAN', 'ISO14230', 'ISO15765', 'ISO9141', 'J1850PWM', 'J1850VPW', 'SCI_A_ENGINE',
-                          'SCI_A_TRANS', 'SCI_B_ENGINE', 'SCI_B_TRANS', 'MSCAN', 'MSISO15765', 'SW_CAN_PS']
+        self.protocols = [
+            'CAN', 'ISO14230', 'ISO15765', 'ISO9141',
+            'J1850PWM', 'J1850VPW', 'SCI_A_ENGINE', 'SCI_A_TRANS',
+            'SCI_B_ENGINE', 'SCI_B_TRANS', 'MSCAN', 'MSISO15765', 'SW_CAN_PS'
+        ]
 
-        self.toolINFO = []
+        self.devices: List[Dict[str, Union[str, List[str]]]] = []
+        self._load_devices()
 
-        self.BaseKey = winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, self.REG_PATH)
-        self.count = winreg.QueryInfoKey(self.BaseKey)[0]
-        self.J2534_Device_Reg_Info = []
+    def _load_devices(self):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, self.REG_PATH) as base_key:
+                num_devices = winreg.QueryInfoKey(base_key)[0]
 
-        for i in range(self.count):
-            DeviceKey = winreg.OpenKeyEx(self.BaseKey, winreg.EnumKey(self.BaseKey, i))
-            Name = winreg.QueryValueEx(DeviceKey, "Name")[0]
-            FunctionLibrary = winreg.QueryValueEx(DeviceKey, "FunctionLibrary")[0]
-            Vendor = winreg.QueryValueEx(DeviceKey, "Vendor")[0]
-            self.toolINFO.append([i, Vendor, Name, FunctionLibrary])
+                for i in range(num_devices):
+                    device_key_name = winreg.EnumKey(base_key, i)
+                    with winreg.OpenKey(base_key, device_key_name) as device_key:
+                        try:
+                            name = winreg.QueryValueEx(device_key, "Name")[0]
+                            dll = winreg.QueryValueEx(device_key, "FunctionLibrary")[0]
+                            vendor = winreg.QueryValueEx(device_key, "Vendor")[0]
+                        except FileNotFoundError:
+                            continue  # Skip incomplete registry entries
 
-            for item in self.Protocols:
-                if self.Search_Registry(item, DeviceKey):
-                    self.toolINFO.append(item)
+                        supported = [
+                            proto for proto in self.protocols
+                            if self._query_registry_value(device_key, proto)
+                        ]
 
-            self.J2534_Device_Reg_Info.append(self.toolINFO)
+                        self.devices.append({
+                            "vendor": vendor,
+                            "name": name,
+                            "dll": dll,
+                            "protocols": supported
+                        })
+
+        except Exception as e:
+            print(f"Failed to enumerate J2534 tools: {e}")
 
     @staticmethod
-    def Search_Registry(name, key):
+    def _query_registry_value(key, name) -> bool:
         try:
-            value, regtype = winreg.QueryValueEx(key, name)
-            return value
-        except WindowsError:
-            return None
+            winreg.QueryValueEx(key, name)
+            return True
+        except FileNotFoundError:
+            return False
 
-    def Protocol_List(self):
-        print(*self.J2534_Device_Reg_Info, sep='\n')
+    def list_protocols(self) -> None:
+        for idx, dev in enumerate(self.devices):
+            print(f"[{idx}] {dev['vendor']} - {dev['name']}")
+            print(f"     DLL Path: {dev['dll']}")
+            print(f"     Supported Protocols: {', '.join(dev['protocols'])}\n")
 
-    def Dll_Path(self, index_of_tool):
+    def dll_path(self, index: int) -> str:
+        return self._safe_get(index, "dll")
+
+    def vendor(self, index: int) -> str:
+        return self._safe_get(index, "vendor")
+
+    def name(self, index: int) -> str:
+        return self._safe_get(index, "name")
+
+    def supported_protocols(self, index: int) -> Union[List[str], str]:
+        return self._safe_get(index, "protocols")
+
+    def _safe_get(self, index: int, key: str) -> Union[str, List[str]]:
         try:
-            return self.J2534_Device_Reg_Info[index_of_tool][0][3]
+            return self.devices[index][key]
         except IndexError:
             return "Selected Tool Index Error.."
 
-    def Vendor(self, index_of_tool):
-        try:
-            return self.J2534_Device_Reg_Info[index_of_tool][0][1]
-        except IndexError:
-            return "Selected Tool Index Error.."
 
-    def Name(self, index_of_tool):
-        try:
-            return self.J2534_Device_Reg_Info[index_of_tool][0][2]
-        except IndexError:
-            return "Selected Tool Index Error.."
-
-    def Supported_Protocols(self, index_of_tool):
-        try:
-            return self.J2534_Device_Reg_Info[index_of_tool][1:]
-        except IndexError:
-            return "Selected Tool Index Error.."
-
-
-
+# Optional debug/test
 if __name__ == '__main__':
-    JPI = ToolProtocolInfo()
-    JPI.Protocol_List()
-    print(JPI.Dll_Path(5))
-    print(JPI.Vendor(5))
-    print(JPI.Name(5))
-    print(JPI.Supported_Protocols(5))
+    jpi = J2534DeviceList()
+    jpi.list_protocols()
+    print(jpi.dll_path(0))
+    print(jpi.vendor(0))
+    print(jpi.name(0))
+    print(jpi.supported_protocols(0))

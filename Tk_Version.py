@@ -1,7 +1,84 @@
 # j2534_gui_tkinter.py
 import tkinter as tk
 
-from ToolProtocolInfo.J2534DeviceList import J2534DeviceList
+class J2534DeviceList:
+    def __init__(self):
+        self.REG_PATH = (
+            r"Software\PassThruSupport.04.04"
+            if platform.architecture()[0] == '32bit'
+            else r"Software\Wow6432Node\PassThruSupport.04.04"
+        )
+
+        self.protocols = [
+            'CAN', 'ISO14230', 'ISO15765', 'ISO9141',
+            'J1850PWM', 'J1850VPW', 'SCI_A_ENGINE', 'SCI_A_TRANS',
+            'SCI_B_ENGINE', 'SCI_B_TRANS', 'MSCAN', 'MSISO15765', 'SW_CAN_PS'
+        ]
+
+        self.devices: List[Dict[str, Union[str, List[str]]]] = []
+        self._load_devices()
+
+    def _load_devices(self):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, self.REG_PATH) as base_key:
+                num_devices = winreg.QueryInfoKey(base_key)[0]
+
+                for i in range(num_devices):
+                    device_key_name = winreg.EnumKey(base_key, i)
+                    with winreg.OpenKey(base_key, device_key_name) as device_key:
+                        try:
+                            name = winreg.QueryValueEx(device_key, "Name")[0]
+                            dll = winreg.QueryValueEx(device_key, "FunctionLibrary")[0]
+                            vendor = winreg.QueryValueEx(device_key, "Vendor")[0]
+                        except FileNotFoundError:
+                            continue  # Skip incomplete registry entries
+
+                        supported = [
+                            proto for proto in self.protocols
+                            if self._query_registry_value(device_key, proto)
+                        ]
+
+                        self.devices.append({
+                            "vendor": vendor,
+                            "name": name,
+                            "dll": dll,
+                            "protocols": supported
+                        })
+
+        except Exception as e:
+            print(f"Failed to enumerate J2534 tools: {e}")
+
+    @staticmethod
+    def _query_registry_value(key, name) -> bool:
+        try:
+            winreg.QueryValueEx(key, name)
+            return True
+        except FileNotFoundError:
+            return False
+
+    def list_protocols(self) -> None:
+        for idx, dev in enumerate(self.devices):
+            print(f"[{idx}] {dev['vendor']} - {dev['name']}")
+            print(f"     DLL Path: {dev['dll']}")
+            print(f"     Supported Protocols: {', '.join(dev['protocols'])}\n")
+
+    def dll_path(self, index: int) -> str:
+        return self._safe_get(index, "dll")
+
+    def vendor(self, index: int) -> str:
+        return self._safe_get(index, "vendor")
+
+    def name(self, index: int) -> str:
+        return self._safe_get(index, "name")
+
+    def supported_protocols(self, index: int) -> Union[List[str], str]:
+        return self._safe_get(index, "protocols")
+
+    def _safe_get(self, index: int, key: str) -> Union[str, List[str]]:
+        try:
+            return self.devices[index][key]
+        except IndexError:
+            return "Selected Tool Index Error.."
 
 
 class J2534Viewer(tk.Tk):
